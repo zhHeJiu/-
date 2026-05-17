@@ -1,0 +1,1236 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>道德问题评估 - Moral Dilemma Assessor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --bg: #101312;
+      --surface: #181d1b;
+      --surface-2: #202622;
+      --surface-3: #252b27;
+      --line: #354038;
+      --text: #f3eee4;
+      --muted: #a9b2a8;
+      --soft: #768173;
+      --teal: #2dd4bf;
+      --teal-2: #0f766e;
+      --amber: #f59e0b;
+      --rose: #fb7185;
+      --green: #4ade80;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(45, 212, 191, .12), transparent 340px),
+        linear-gradient(135deg, #101312 0%, #151713 45%, #0f1514 100%);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    @keyframes digitPulse { 0% { filter: brightness(1.25); } 100% { filter: brightness(1); } }
+    @keyframes sweep { from { transform: translateX(-70%); } to { transform: translateX(180%); } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+    .shell { max-width: 1280px; margin: 0 auto; padding: 22px; }
+    .panel {
+      background: linear-gradient(180deg, rgba(32, 38, 34, .96), rgba(24, 29, 27, .96));
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: 0 18px 48px rgba(0, 0, 0, .26);
+    }
+    .plate {
+      background: rgba(16, 19, 18, .56);
+      border: 1px solid rgba(117, 129, 115, .24);
+      border-radius: 8px;
+    }
+    .field {
+      background: #111615;
+      border: 1px solid #3a453f;
+      border-radius: 8px;
+      color: var(--text);
+      outline: none;
+      transition: border-color .18s ease, box-shadow .18s ease;
+    }
+    .field:focus {
+      border-color: var(--teal);
+      box-shadow: 0 0 0 3px rgba(45, 212, 191, .16);
+    }
+    .button {
+      border-radius: 8px;
+      transition: transform .16s ease, background .16s ease, border-color .16s ease;
+    }
+    .button:hover { transform: translateY(-1px); }
+    .button:disabled { opacity: .55; cursor: not-allowed; transform: none; }
+
+    .stat {
+      min-height: 88px;
+      border: 1px solid rgba(117, 129, 115, .28);
+      border-radius: 8px;
+      background: rgba(24, 29, 27, .84);
+      padding: 14px;
+    }
+    .rolling-number {
+      display: inline-flex;
+      align-items: baseline;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    .rolling-digit {
+      display: inline-block;
+      width: .62em;
+      height: 1em;
+      overflow: hidden;
+      line-height: 1;
+    }
+    .rolling-strip {
+      display: flex;
+      flex-direction: column;
+      transition: transform .34s cubic-bezier(.2, .75, .22, 1);
+      will-change: transform;
+    }
+    .rolling-strip span { display: block; height: 1em; line-height: 1; }
+    .rolling-separator { display: inline-block; width: .34em; text-align: center; color: var(--soft); }
+    .rolling-number.predicted { color: var(--amber); animation: digitPulse .42s ease; }
+
+    .step {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid transparent;
+      color: var(--muted);
+    }
+    .step-mark {
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #46544c;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .step.active { border-color: rgba(45, 212, 191, .35); background: rgba(45, 212, 191, .08); color: var(--text); }
+    .step.active .step-mark { border-color: var(--teal); background: rgba(45, 212, 191, .18); color: var(--teal); }
+    .step.done { border-color: rgba(74, 222, 128, .28); background: rgba(74, 222, 128, .07); color: var(--text); }
+    .step.done .step-mark { border-color: var(--green); background: rgba(74, 222, 128, .16); color: var(--green); }
+
+    .progress {
+      position: relative;
+      height: 7px;
+      overflow: hidden;
+      border-radius: 999px;
+      background: #2b332f;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--teal), var(--green));
+      transition: width .28s ease;
+    }
+    .progress-fill.running::after {
+      content: "";
+      display: block;
+      width: 46%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.45), transparent);
+      animation: sweep 1.4s linear infinite;
+    }
+
+    .log {
+      border-left: 3px solid #46544c;
+      padding: 7px 9px 7px 10px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .log.ok { border-left-color: var(--green); color: #d9fbe6; }
+    .log.warn { border-left-color: var(--amber); color: #fdecc8; }
+    .log.error { border-left-color: var(--rose); color: #ffd6dd; background: rgba(251, 113, 133, .08); border-radius: 0 8px 8px 0; }
+
+    .result-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(360px, .82fr); gap: 16px; }
+    .score-card {
+      border: 1px solid rgba(255, 255, 255, .09);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(0,0,0,.12));
+      padding: 14px;
+    }
+    .score-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .score-axis {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) 48px;
+      gap: 10px;
+      margin: 9px 0 7px;
+      color: var(--soft);
+      font-size: 10px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .severity-row {
+      display: grid;
+      grid-template-columns: 72px minmax(0, 1fr) 48px;
+      gap: 10px;
+      align-items: center;
+    }
+    .severity-row + .severity-row { margin-top: 9px; }
+    .party-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: #d7d2c6;
+      font-size: 12px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+    .party-dot { width: 8px; height: 8px; border-radius: 999px; background: var(--teal); box-shadow: 0 0 14px rgba(20,184,166,.35); }
+    .party-dot.con { background: var(--rose); box-shadow: 0 0 14px rgba(251,113,133,.35); }
+    .severity-track {
+      position: relative;
+      width: 100%;
+      height: 18px;
+      overflow: hidden;
+      border-radius: 6px;
+      background:
+        repeating-linear-gradient(90deg, transparent 0, transparent calc(10% - 1px), rgba(255,255,255,.095) calc(10% - 1px), rgba(255,255,255,.095) 10%),
+        linear-gradient(90deg, rgba(148,163,184,.12), rgba(245,158,11,.13), rgba(251,113,133,.15));
+      box-shadow: inset 0 0 0 1px rgba(255,255,255,.07), inset 0 10px 18px rgba(0,0,0,.16);
+    }
+    .severity-fill {
+      position: relative;
+      height: 100%;
+      min-width: 2px;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #d7a948 0%, #df7a4f 52%, #fb7185 100%);
+      box-shadow: 0 0 18px rgba(251,113,133,.22);
+      transition: width .45s cubic-bezier(.2,.8,.2,1);
+    }
+    .severity-score {
+      color: #f4efe3;
+      font-variant-numeric: tabular-nums;
+      text-align: right;
+      font-size: 13px;
+      font-weight: 800;
+    }
+    .jury-panel {
+      border-top: 1px solid rgba(94, 234, 212, .18);
+      background:
+        linear-gradient(180deg, rgba(20, 184, 166, .055), rgba(0,0,0,0) 34%),
+        var(--panel);
+    }
+    .jury-header {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .jury-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .jury-card {
+      display: flex;
+      min-height: 100%;
+      flex-direction: column;
+      gap: 12px;
+      border: 1px solid rgba(255, 255, 255, .09);
+      border-radius: 12px;
+      background: rgba(0, 0, 0, .16);
+      padding: 14px;
+    }
+    .jury-reason {
+      flex: 1;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.75;
+    }
+    .jury-score-pair {
+      display: grid;
+      gap: 8px;
+    }
+    .jury-score-row {
+      display: grid;
+      grid-template-columns: 62px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, .045);
+      padding: 8px;
+      font-size: 12px;
+    }
+    .jury-score-row strong { color: #f7f0df; }
+    .jury-score-row span:last-child {
+      color: var(--soft);
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+    .appear { animation: fadeUp .32s ease both; }
+
+    @media (max-width: 980px) {
+      .shell { padding: 14px; }
+      .result-grid { grid-template-columns: 1fr; }
+      .score-axis, .severity-row { grid-template-columns: 64px minmax(0, 1fr) 42px; gap: 8px; }
+      .jury-header { align-items: start; flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="mb-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_660px] lg:items-end">
+      <div>
+        <div class="mb-3 inline-flex items-center gap-2 rounded-full border border-teal-400/25 bg-teal-400/10 px-3 py-1 text-xs font-semibold text-teal-200">
+          <span class="h-1.5 w-1.5 rounded-full bg-teal-300"></span>
+          Moral Dilemma Assessor
+        </div>
+        <h1 class="text-3xl font-bold md:text-4xl">道德问题评估</h1>
+      </div>
+
+      <div class="grid gap-3 sm:grid-cols-4">
+        <div class="stat sm:col-span-2">
+          <div class="flex items-center justify-between text-xs text-[color:var(--muted)]">
+            <span>TOKEN</span>
+            <span id="token-mode">confirmed</span>
+          </div>
+          <div class="mt-3 flex items-end gap-2">
+            <span id="token-prefix" class="text-lg font-bold text-amber-300"></span>
+            <span id="tokens-main" class="rolling-number text-4xl font-bold text-teal-100">0</span>
+          </div>
+        </div>
+        <div class="stat">
+          <div class="text-xs text-[color:var(--muted)]">TPS</div>
+          <div id="tps-value" class="mt-3 text-3xl font-bold text-amber-200">--</div>
+          <div class="mt-2 text-xs text-[color:var(--soft)]">adaptive</div>
+        </div>
+        <div class="stat">
+          <div class="text-xs text-[color:var(--muted)]">CALLS</div>
+          <div class="mt-3 text-3xl font-bold"><span id="calls-started">0</span>/<span id="calls-total">8</span></div>
+          <div class="mt-2 text-xs text-[color:var(--soft)]">active <span id="calls-active">0</span></div>
+        </div>
+      </div>
+    </header>
+
+    <div id="error-banner" class="mb-4 hidden rounded-lg border border-rose-300/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-100"></div>
+
+    <main class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_410px]">
+      <section class="panel p-5 md:p-6">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold">Case Input</h2>
+            <div id="char-count" class="mt-1 text-sm text-[color:var(--muted)]">0 字</div>
+          </div>
+          <button id="reset-btn" type="button" onclick="resetAll()" class="button border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-stone-200 hover:bg-white/10">清空</button>
+        </div>
+
+        <textarea
+          id="input-text"
+          class="field h-72 w-full resize-none p-4 text-sm leading-7"
+          placeholder="例如：今天开会时，同事当众指出我报告里有数据错误，并说「你是不是根本没核对」。我回应说「你别当着所有人羞辱我」，随后提前离开会议室。"
+        ></textarea>
+
+        <div class="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div id="status-line" class="text-sm text-[color:var(--muted)]">Idle</div>
+          <button id="submit-btn" type="button" onclick="submitAssessment()" class="button bg-teal-500 px-6 py-3 text-sm font-bold text-slate-950 hover:bg-teal-300">
+            开始分析
+          </button>
+        </div>
+
+        <div id="followup-panel" class="mt-5 hidden rounded-lg border border-amber-300/25 bg-amber-400/10 p-4">
+          <h3 class="text-sm font-semibold text-amber-100">需要补充</h3>
+          <p id="followup-question" class="mt-2 text-sm leading-6 text-amber-50"></p>
+          <textarea id="followup-input" class="field mt-3 h-28 w-full resize-none p-3 text-sm leading-6" placeholder="补充事实..."></textarea>
+          <button type="button" onclick="submitFollowup()" class="button mt-3 bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">继续分析</button>
+        </div>
+      </section>
+
+      <aside class="space-y-5">
+        <section class="panel p-5">
+          <div class="mb-4 flex items-center justify-between">
+            <h2 class="text-base font-semibold">Run Monitor</h2>
+            <span id="status-badge" class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-[color:var(--muted)]">READY</span>
+          </div>
+          <div class="progress mb-4"><div id="progress-fill" class="progress-fill"></div></div>
+          <div class="space-y-2">
+            <div class="step" id="step-1"><span class="step-mark" id="mark-1">1</span><div><div class="text-sm font-semibold">质量检测</div><div id="step-note-1" class="text-xs text-[color:var(--soft)]">pending</div></div></div>
+            <div class="step" id="step-2"><span class="step-mark" id="mark-2">2</span><div><div class="text-sm font-semibold">中立化转译</div><div id="step-note-2" class="text-xs text-[color:var(--soft)]">pending</div></div></div>
+            <div class="step" id="step-3"><span class="step-mark" id="mark-3">3</span><div><div class="text-sm font-semibold">视角重构</div><div id="step-note-3" class="text-xs text-[color:var(--soft)]">pending</div></div></div>
+            <div class="step" id="step-4"><span class="step-mark" id="mark-4">4</span><div><div class="text-sm font-semibold">陪审团评分</div><div id="step-note-4" class="text-xs text-[color:var(--soft)]">pending</div></div></div>
+            <div class="step" id="step-5"><span class="step-mark" id="mark-5">5</span><div><div class="text-sm font-semibold">聚合结果</div><div id="step-note-5" class="text-xs text-[color:var(--soft)]">pending</div></div></div>
+          </div>
+        </section>
+
+        <section class="panel p-5">
+          <div class="mb-3 flex items-center justify-between">
+            <h2 class="text-base font-semibold">Event Log</h2>
+            <span class="text-xs text-[color:var(--soft)]"><span id="tokens-side" class="rolling-number">0</span> tokens</span>
+          </div>
+          <div id="event-log" class="max-h-56 space-y-2 overflow-y-auto"></div>
+        </section>
+
+        <section class="panel p-5">
+          <div class="mb-4 flex items-center justify-between gap-3">
+            <h2 class="text-base font-semibold">模型配置</h2>
+            <span id="config-status" class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold text-[color:var(--muted)]">LOADING</span>
+          </div>
+          <div class="space-y-3">
+            <label class="block">
+              <span class="mb-1 block text-xs font-semibold text-[color:var(--soft)]">API Key</span>
+              <input id="config-api-key" type="password" autocomplete="off" class="field w-full px-3 py-2 text-sm" placeholder="输入新 Key 后自动替换">
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-xs font-semibold text-[color:var(--soft)]">Base URL</span>
+              <input id="config-api-base" type="url" class="field w-full px-3 py-2 text-sm">
+            </label>
+            <label class="block">
+              <span class="mb-1 block text-xs font-semibold text-[color:var(--soft)]">Model</span>
+              <input id="config-model" type="text" class="field w-full px-3 py-2 text-sm">
+            </label>
+            <div class="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <label class="block">
+                <span class="mb-1 block text-xs font-semibold text-[color:var(--soft)]">前置温度</span>
+                <input id="config-default-temperature" type="number" min="0" max="2" step="0.05" class="field w-full px-3 py-2 text-sm">
+              </label>
+              <label class="block">
+                <span class="mb-1 block text-xs font-semibold text-[color:var(--soft)]">评分温度</span>
+                <input id="config-judge-temperature" type="number" min="0" max="2" step="0.05" class="field w-full px-3 py-2 text-sm">
+              </label>
+              <label class="block">
+                <span class="mb-1 block text-xs font-semibold text-[color:var(--soft)]">重试</span>
+                <input id="config-max-retries" type="number" min="0" max="5" step="1" class="field w-full px-3 py-2 text-sm">
+              </label>
+            </div>
+            <button id="config-clear-key" type="button" onclick="clearSavedApiKey()" class="button w-full border border-rose-300/25 bg-rose-400/10 px-3 py-2 text-sm font-semibold text-rose-100 hover:bg-rose-400/15">清除已保存 Key</button>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <section id="results" class="mt-5 hidden">
+      <div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h2 class="text-2xl font-bold">Assessment</h2>
+          <p class="mt-1 text-sm text-[color:var(--muted)]">正方在左，反方在右</p>
+        </div>
+        <div class="flex flex-wrap gap-2">
+          <button type="button" onclick="downloadReport()" class="button bg-amber-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-amber-300">下载报告</button>
+          <button type="button" onclick="resetAll()" class="button border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-stone-200 hover:bg-white/10">新案例</button>
+        </div>
+      </div>
+
+      <article class="panel mb-4 p-5">
+        <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+          <div>
+            <div class="text-xs font-bold uppercase tracking-wider text-teal-200">Verdict</div>
+            <h3 id="verdict-title" class="mt-1 text-xl font-bold">等待结论</h3>
+            <p id="verdict-detail" class="mt-2 text-sm leading-6 text-[color:var(--muted)]"></p>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="plate p-3"><div class="text-xs text-[color:var(--soft)]">主要问题</div><div id="primary-issue" class="mt-1 font-bold">-</div></div>
+            <div class="plate p-3"><div class="text-xs text-[color:var(--soft)]">置信度</div><div id="confidence-label" class="mt-1 font-bold">-</div></div>
+          </div>
+        </div>
+        <div id="mediation-advice" class="mt-4 rounded-lg border border-teal-300/20 bg-teal-400/10 p-3 text-sm leading-6 text-teal-50"></div>
+      </article>
+
+      <div class="result-grid">
+        <div class="space-y-4">
+          <article class="panel p-5">
+            <h3 class="text-base font-semibold">客观事实</h3>
+            <p id="neutral-narrative" class="plate mt-3 p-4 text-sm leading-7 text-[color:var(--muted)]"></p>
+          </article>
+          <article class="panel p-5">
+            <h3 class="text-base font-semibold">视角重构</h3>
+            <div class="mt-3 grid gap-3 sm:grid-cols-2">
+              <div class="rounded-lg border border-teal-300/20 bg-teal-400/10 p-4">
+                <div class="mb-3 text-sm font-bold text-teal-100">正方（你）</div>
+                <div class="text-xs font-semibold text-teal-200">说出口的话</div>
+                <p id="pro-spoken" class="mt-1 rounded-md bg-black/20 p-2 text-sm leading-6 text-stone-200"></p>
+                <div class="mt-3 text-xs font-semibold text-teal-200">内心需求</div>
+                <p id="pro-need" class="mt-1 rounded-md bg-black/20 p-2 text-sm leading-6 text-stone-200"></p>
+              </div>
+              <div class="rounded-lg border border-rose-300/20 bg-rose-400/10 p-4">
+                <div class="mb-3 text-sm font-bold text-rose-100">反方（对方）</div>
+                <div class="text-xs font-semibold text-rose-200">说出口的话</div>
+                <p id="con-spoken" class="mt-1 rounded-md bg-black/20 p-2 text-sm leading-6 text-stone-200"></p>
+                <div class="mt-3 text-xs font-semibold text-rose-200">内心需求</div>
+                <p id="con-need" class="mt-1 rounded-md bg-black/20 p-2 text-sm leading-6 text-stone-200"></p>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div class="space-y-4">
+          <article class="panel p-5">
+            <div class="flex items-center justify-between gap-3">
+              <div>
+                <h3 class="text-base font-semibold">错误度</h3>
+                <p class="mt-1 text-xs text-[color:var(--soft)]">越高代表该方行为问题越严重，不代表更有道理。</p>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-center">
+                <div class="plate px-4 py-2"><div id="pro-total" class="text-2xl font-bold text-amber-100">0</div><div class="text-xs text-[color:var(--soft)]">正方错误度</div></div>
+                <div class="plate px-4 py-2"><div id="con-total" class="text-2xl font-bold text-amber-100">0</div><div class="text-xs text-[color:var(--soft)]">反方错误度</div></div>
+              </div>
+            </div>
+            <div id="score-chart" class="mt-5 space-y-4"></div>
+          </article>
+        </div>
+      </div>
+
+      <article class="panel jury-panel mt-4 p-5">
+        <div class="jury-header">
+          <div>
+            <h3 class="text-base font-semibold">陪审团点评</h3>
+            <p class="mt-1 text-xs text-[color:var(--soft)]">每位裁判的独立判断与四维错误度评分。</p>
+          </div>
+          <div class="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-[color:var(--soft)]">身份 / 反应 / 边界 / 建设性</div>
+        </div>
+        <div id="verdict-reasons" class="jury-grid mt-4"></div>
+      </article>
+    </section>
+  </div>
+
+  <script>
+    const API_BASE = new URLSearchParams(location.search).get('api')
+      || localStorage.getItem('MORAL_API_BASE')
+      || 'http://localhost:8011/api';
+    const TICK_MS = 400;
+    const FALLBACK_TPS = 42;
+    const STEP_LABELS = ['', '质量检测', '中立化转译', '视角重构', '陪审团评分', '聚合结果'];
+    const DIMENSIONS = [
+      { key: 'identity_labeling', label: '身份标签化' },
+      { key: 'proportionality', label: '反应失衡' },
+      { key: 'boundary_awareness', label: '越界程度' },
+      { key: 'constructiveness', label: '缺乏建设性' },
+    ];
+
+    let pendingInput = '';
+    let streamStarted = false;
+    let currentController = null;
+    let usageTimer = null;
+    let lastTickAt = performance.now();
+    let latestReport = null;
+    let configLoaded = false;
+    let configSaveTimer = null;
+    const CONFIG_SAVE_DELAY_MS = 700;
+
+    const usage = {
+      confirmedTokens: 0,
+      displayedTokens: 0,
+      predictedTokens: 0,
+      callsStarted: 0,
+      callsCompleted: 0,
+      activeCalls: 0,
+      totalCalls: 8,
+      tps: 0,
+      tpsSamples: 0,
+      streaming: false,
+      predicting: false,
+    };
+
+    function $(id) { return document.getElementById(id); }
+    function text(id, value) { const el = $(id); if (el) el.textContent = value; }
+    function htmlEscape(value) {
+      return String(value ?? '').replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;').replaceAll('"', '&quot;').replaceAll("'", '&#039;');
+    }
+    function digitStrip() { return Array.from({ length: 10 }, (_, i) => `<span>${i}</span>`).join(''); }
+
+    function renderRolling(container, value, predicted) {
+      if (!container) return;
+      const formatted = Math.max(0, Math.round(value)).toLocaleString();
+      const shape = formatted.replace(/\d/g, '#');
+      if (container.dataset.shape !== shape) {
+        container.innerHTML = formatted.split('').map((char, index) => (
+          /\d/.test(char)
+            ? `<span class="rolling-digit" data-index="${index}"><span class="rolling-strip">${digitStrip()}</span></span>`
+            : `<span class="rolling-separator" data-index="${index}">${char}</span>`
+        )).join('');
+        container.dataset.shape = shape;
+      }
+      formatted.split('').forEach((char, index) => {
+        if (!/\d/.test(char)) return;
+        const strip = container.querySelector(`[data-index="${index}"] .rolling-strip`);
+        if (strip) strip.style.transform = `translateY(-${Number(char)}em)`;
+      });
+      container.classList.toggle('predicted', !!predicted);
+    }
+
+    function applyUsage() {
+      renderRolling($('tokens-main'), usage.displayedTokens, usage.predicting);
+      renderRolling($('tokens-side'), usage.displayedTokens, usage.predicting);
+      text('token-prefix', usage.predicting ? '≈' : '');
+      text('token-mode', usage.predicting ? 'predicting' : 'confirmed');
+      text('calls-started', usage.callsStarted);
+      text('calls-total', usage.totalCalls);
+      text('calls-active', usage.activeCalls);
+      text('tps-value', usage.tpsSamples ? usage.tps.toFixed(1) : '--');
+    }
+
+    function ingestTps(payload) {
+      const sample = Number(payload.tps_observed ?? payload.tokens?.tps_observed);
+      if (!Number.isFinite(sample) || sample <= 0) return;
+      usage.tps = usage.tpsSamples ? usage.tps * 0.68 + sample * 0.32 : sample;
+      usage.tpsSamples += 1;
+    }
+
+    function resetUsage() {
+      usage.confirmedTokens = 0;
+      usage.displayedTokens = 0;
+      usage.predictedTokens = 0;
+      usage.callsStarted = 0;
+      usage.callsCompleted = 0;
+      usage.activeCalls = 0;
+      usage.totalCalls = 8;
+      usage.tps = 0;
+      usage.tpsSamples = 0;
+      usage.streaming = false;
+      usage.predicting = false;
+      lastTickAt = performance.now();
+      applyUsage();
+    }
+
+    function startUsageTimer() {
+      if (!usageTimer) usageTimer = setInterval(tickUsage, TICK_MS);
+    }
+
+    function tickUsage() {
+      const now = performance.now();
+      const dt = Math.max(0.05, (now - lastTickAt) / 1000);
+      lastTickAt = now;
+
+      const effectiveTps = usage.tpsSamples ? usage.tps : FALLBACK_TPS;
+      if (usage.streaming && usage.activeCalls > 0) {
+        const projected = usage.predictedTokens + effectiveTps * usage.activeCalls * dt;
+        const softCap = usage.confirmedTokens + Math.max(240, effectiveTps * usage.activeCalls * 18);
+        usage.predictedTokens = Math.min(Math.max(projected, usage.confirmedTokens), softCap);
+        usage.predicting = usage.predictedTokens > usage.confirmedTokens + 1;
+      } else {
+        usage.predictedTokens = usage.confirmedTokens;
+        usage.predicting = false;
+      }
+
+      const target = Math.max(usage.confirmedTokens, usage.predictedTokens);
+      const diff = target - usage.displayedTokens;
+      usage.displayedTokens = Math.abs(diff) < 1 ? target : usage.displayedTokens + diff * 0.45;
+      applyUsage();
+
+      if (!usage.streaming && Math.round(usage.displayedTokens) === Math.round(usage.confirmedTokens)) {
+        clearInterval(usageTimer);
+        usageTimer = null;
+      }
+    }
+
+    function updateUsage(data) {
+      ingestTps(data);
+      const tokenValue = typeof data.total_tokens === 'number'
+        ? data.total_tokens
+        : (typeof data.tokens?.cumulative_total_tokens === 'number' ? data.tokens.cumulative_total_tokens : null);
+      if (typeof tokenValue === 'number') {
+        usage.confirmedTokens = Math.max(0, tokenValue);
+        usage.predictedTokens = Math.max(usage.predictedTokens, usage.confirmedTokens);
+      }
+      if (typeof data.ai_calls_started === 'number') usage.callsStarted = data.ai_calls_started;
+      if (typeof data.ai_calls_completed === 'number') usage.callsCompleted = data.ai_calls_completed;
+      if (typeof data.active_ai_calls === 'number') usage.activeCalls = data.active_ai_calls;
+      if (typeof data.total_ai_calls === 'number') usage.totalCalls = data.total_ai_calls;
+      startUsageTimer();
+      tickUsage();
+    }
+
+    function setError(message) {
+      const banner = $('error-banner');
+      if (!message) { banner.classList.add('hidden'); banner.textContent = ''; return; }
+      banner.textContent = message;
+      banner.classList.remove('hidden');
+    }
+
+    function setStatus(label, tone = 'idle') {
+      text('status-line', label);
+      const badge = $('status-badge');
+      badge.textContent = tone.toUpperCase();
+      badge.className = 'rounded-full border px-3 py-1 text-xs font-semibold';
+      if (tone === 'running') badge.classList.add('border-teal-300/30', 'bg-teal-400/10', 'text-teal-100');
+      else if (tone === 'done') badge.classList.add('border-green-300/30', 'bg-green-400/10', 'text-green-100');
+      else if (tone === 'error') badge.classList.add('border-rose-300/30', 'bg-rose-400/10', 'text-rose-100');
+      else badge.classList.add('border-white/10', 'bg-white/5', 'text-[color:var(--muted)]');
+    }
+
+    function setConfigStatus(label, tone = 'idle') {
+      const badge = $('config-status');
+      if (!badge) return;
+      badge.textContent = label;
+      badge.className = 'rounded-full border px-3 py-1 text-xs font-semibold';
+      if (tone === 'saving') badge.classList.add('border-amber-300/30', 'bg-amber-400/10', 'text-amber-100');
+      else if (tone === 'done') badge.classList.add('border-green-300/30', 'bg-green-400/10', 'text-green-100');
+      else if (tone === 'error') badge.classList.add('border-rose-300/30', 'bg-rose-400/10', 'text-rose-100');
+      else badge.classList.add('border-white/10', 'bg-white/5', 'text-[color:var(--muted)]');
+    }
+
+    function fillConfigForm(config) {
+      $('config-api-key').value = '';
+      $('config-api-key').placeholder = config.has_api_key
+        ? `已保存：${config.api_key_hint}，输入新 Key 后自动替换`
+        : '输入 MiniMax API Key';
+      $('config-api-base').value = config.minimax_base_url || '';
+      $('config-model').value = config.model || '';
+      $('config-default-temperature').value = config.default_temperature ?? '';
+      $('config-judge-temperature').value = config.judge_temperature ?? '';
+      $('config-max-retries').value = config.llm_max_retries ?? '';
+      $('config-clear-key').disabled = !config.has_api_key;
+    }
+
+    async function loadModelConfig() {
+      try {
+        configLoaded = false;
+        setConfigStatus('LOADING');
+        const response = await fetch(API_BASE + '/config');
+        if (!response.ok) throw new Error(await response.text() || '配置读取失败');
+        const config = await response.json();
+        fillConfigForm(config);
+        configLoaded = true;
+        setConfigStatus('已保存', 'done');
+      } catch (error) {
+        setConfigStatus('失败', 'error');
+        logEvent('配置读取失败：' + error.message, 'error');
+      }
+    }
+
+    function readConfigForm(extra = {}) {
+      const payload = {
+        minimax_base_url: $('config-api-base').value.trim(),
+        model: $('config-model').value.trim(),
+        default_temperature: Number($('config-default-temperature').value),
+        judge_temperature: Number($('config-judge-temperature').value),
+        llm_max_retries: Number($('config-max-retries').value),
+        ...extra,
+      };
+      const apiKey = $('config-api-key').value.trim();
+      if (apiKey) payload.minimax_api_key = apiKey;
+      return payload;
+    }
+
+    function scheduleConfigSave() {
+      if (!configLoaded) return;
+      clearTimeout(configSaveTimer);
+      setConfigStatus('待保存', 'saving');
+      configSaveTimer = setTimeout(() => saveModelConfig(), CONFIG_SAVE_DELAY_MS);
+    }
+
+    async function saveModelConfig(extra = {}) {
+      if (!configLoaded) return;
+      clearTimeout(configSaveTimer);
+      setConfigStatus('保存中', 'saving');
+      try {
+        const response = await fetch(API_BASE + '/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(readConfigForm(extra)),
+        });
+        if (!response.ok) {
+          let detail = await response.text();
+          try { detail = JSON.parse(detail).detail || detail; } catch (_) {}
+          throw new Error(detail || '配置保存失败');
+        }
+        const config = await response.json();
+        fillConfigForm(config);
+        setConfigStatus('已保存', 'done');
+      } catch (error) {
+        setConfigStatus('保存失败', 'error');
+        logEvent('配置保存失败：' + error.message, 'error');
+      }
+    }
+
+    async function clearSavedApiKey() {
+      await saveModelConfig({ clear_api_key: true });
+    }
+
+    function logEvent(message, tone = '') {
+      const log = $('event-log');
+      const item = document.createElement('div');
+      item.className = `log ${tone}`.trim();
+      item.textContent = message;
+      log.prepend(item);
+      while (log.children.length > 12) log.lastElementChild.remove();
+    }
+
+    function setProgress(step, status = 'running', meta = {}) {
+      for (let i = 1; i <= 5; i++) {
+        const row = $(`step-${i}`);
+        const mark = $(`mark-${i}`);
+        const note = $(`step-note-${i}`);
+        row.classList.remove('active', 'done');
+        mark.textContent = i;
+        note.textContent = 'pending';
+        if (i < step || (i === step && status === 'done')) {
+          row.classList.add('done');
+          mark.textContent = '✓';
+          note.textContent = 'done';
+        } else if (i === step) {
+          row.classList.add('active');
+          note.textContent = meta.completed_judges !== undefined ? `${meta.completed_judges}/${meta.total_judges}` : 'running';
+        }
+      }
+      const fill = $('progress-fill');
+      const percent = Math.min(100, Math.max(0, ((step - 1) / 5) * 100 + (status === 'done' ? 20 : 8)));
+      fill.style.width = `${percent}%`;
+      fill.classList.toggle('running', usage.streaming);
+    }
+
+    function resetProgress() {
+      for (let i = 1; i <= 5; i++) {
+        $(`step-${i}`).classList.remove('active', 'done');
+        $(`mark-${i}`).textContent = i;
+        $(`step-note-${i}`).textContent = 'pending';
+      }
+      $('progress-fill').style.width = '0%';
+      $('progress-fill').classList.remove('running');
+      $('event-log').innerHTML = '';
+      setStatus('Idle');
+    }
+
+    function setBusy(isBusy) {
+      $('submit-btn').disabled = isBusy;
+      $('reset-btn').disabled = isBusy;
+      $('input-text').disabled = isBusy;
+      $('submit-btn').textContent = isBusy ? '分析中...' : '开始分析';
+      $('input-text').classList.toggle('opacity-60', isBusy);
+    }
+
+    function processSSEBlock(block) {
+      const event = { type: 'message', data: '' };
+      block.split(/\r?\n/).forEach(line => {
+        if (line.startsWith('event:')) event.type = line.slice(6).trim();
+        else if (line.startsWith('data:')) event.data += line.slice(5).trimStart();
+      });
+      if (!event.data) return;
+      let parsed;
+      try {
+        parsed = JSON.parse(event.data);
+      } catch (err) {
+        logEvent('解析事件失败：' + (err.message || err), 'warn');
+        return;
+      }
+      handleStreamEvent(parsed, event.type);
+    }
+
+    function processSSEBuffer(buffer) {
+      const blocks = buffer.split(/\r?\n\r?\n/);
+      const remaining = blocks.pop();
+      blocks.forEach(processSSEBlock);
+      return remaining;
+    }
+
+    function scoreValue(value) {
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? Math.max(0, Math.min(10, numeric)) : 0;
+    }
+    function scoreText(value) { return value === null || value === undefined ? '-' : scoreValue(value).toFixed(1); }
+    function renderSeverityRow(label, value, side) {
+      const score = scoreValue(value);
+      const percent = score * 10;
+      const fillStyle = `width:${percent}%;${score <= 0 ? 'min-width:0;' : ''}`;
+      return `<div class="severity-row">
+        <div class="party-tag"><span class="party-dot ${side === 'con' ? 'con' : ''}"></span>${htmlEscape(label)}</div>
+        <div class="severity-track" role="meter" aria-valuemin="0" aria-valuemax="10" aria-valuenow="${score.toFixed(1)}" aria-label="${htmlEscape(label)}错误度">
+          <div class="severity-fill" style="${fillStyle}"></div>
+        </div>
+        <div class="severity-score">${score.toFixed(1)}</div>
+      </div>`;
+    }
+
+    function formatReportDate(value) {
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('zh-CN', { hour12: false });
+    }
+
+    function reportFileStamp(value) {
+      const date = new Date(value);
+      const pad = number => String(number).padStart(2, '0');
+      return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
+    }
+
+    function reportMeter(value) {
+      const score = scoreValue(value);
+      return `<div class="report-meter"><span style="width:${score * 10}%"></span></div>`;
+    }
+
+    function buildReportHtml(report) {
+      const data = report.data || {};
+      const steps = data.steps || {};
+      const scores = data.final_scores || {};
+      const summary = scores.verdict_summary || {};
+      const perspective = steps.step3_perspective || {};
+      const confidenceMap = { high: '高', medium: '中', low: '低' };
+      const scoreRows = scores.error
+        ? `<tr><td colspan="4">${htmlEscape(scores.error)}</td></tr>`
+        : DIMENSIONS.map(dim => {
+          const pro = scoreValue(scores.pro_avg?.[dim.key]);
+          const con = scoreValue(scores.con_avg?.[dim.key]);
+          return `<tr>
+            <td>${htmlEscape(dim.label)}</td>
+            <td><strong>${pro.toFixed(1)}</strong>${reportMeter(pro)}</td>
+            <td><strong>${con.toFixed(1)}</strong>${reportMeter(con)}</td>
+            <td>越高代表该方行为问题越严重</td>
+          </tr>`;
+        }).join('');
+      const judgeCards = (scores.judge_scores || []).map(judge => {
+        const pro = judge.pro_scores || {};
+        const con = judge.con_scores || {};
+        return `<article class="judge">
+          <div class="judge-head"><h3>${htmlEscape(judge.judge_name || judge.judge_id || '裁判')}</h3><span>权重 ${Number(judge.weight || 1).toFixed(1)}</span></div>
+          <p>${htmlEscape(judge.brief_reason || '无点评')}</p>
+          <div class="judge-scores">
+            <div><b>正方</b>${scoreText(pro.identity_labeling)} / ${scoreText(pro.proportionality)} / ${scoreText(pro.boundary_awareness)} / ${scoreText(pro.constructiveness)}</div>
+            <div><b>反方</b>${scoreText(con.identity_labeling)} / ${scoreText(con.proportionality)} / ${scoreText(con.boundary_awareness)} / ${scoreText(con.constructiveness)}</div>
+          </div>
+        </article>`;
+      }).join('') || '<p class="muted">暂无陪审团点评。</p>';
+      const failedJudges = (scores.failed_judges || []).map(failed => (
+        `<p class="warning">${htmlEscape(failed.judge_name || failed.judge_id || '某位裁判')} 未参与聚合：${htmlEscape(failed.error || '结果无效')}</p>`
+      )).join('');
+      return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>道德问题评估报告</title>
+  <style>
+    :root { color-scheme: dark; --bg:#101312; --panel:#181d1b; --line:#354038; --text:#f3eee4; --muted:#a9b2a8; --soft:#768173; --teal:#2dd4bf; --amber:#f59e0b; --rose:#fb7185; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #101312; color: var(--text); font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif; line-height: 1.7; }
+    main { max-width: 1040px; margin: 0 auto; padding: 32px 22px 48px; }
+    header { border-bottom: 1px solid var(--line); margin-bottom: 22px; padding-bottom: 18px; }
+    h1 { margin: 0; font-size: 30px; }
+    h2 { margin: 0 0 10px; font-size: 18px; }
+    h3 { margin: 0; font-size: 15px; }
+    .muted { color: var(--muted); }
+    .meta { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 16px; }
+    .tile, section, .judge { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+    .tile { padding: 12px; }
+    .tile span { display: block; color: var(--soft); font-size: 12px; }
+    .tile b { font-size: 18px; }
+    section { margin-top: 14px; padding: 18px; }
+    .text-block { white-space: pre-wrap; color: var(--muted); }
+    .verdict { border-color: rgba(45,212,191,.35); background: linear-gradient(180deg, rgba(45,212,191,.09), rgba(24,29,27,.96)); }
+    .advice { border-left: 3px solid var(--teal); padding-left: 12px; color: #dffcf6; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    table { width: 100%; border-collapse: collapse; overflow: hidden; border-radius: 8px; }
+    th, td { border-bottom: 1px solid rgba(255,255,255,.08); padding: 10px; text-align: left; vertical-align: top; }
+    th { color: var(--soft); font-size: 12px; }
+    .report-meter { height: 8px; margin-top: 6px; border-radius: 99px; overflow: hidden; background: #2d3631; }
+    .report-meter span { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #d7a948, #df7a4f, #fb7185); }
+    .judge-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .judge { padding: 14px; }
+    .judge-head { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+    .judge-head span { color: var(--soft); font-size: 12px; white-space: nowrap; }
+    .judge p { color: var(--muted); margin: 10px 0; }
+    .judge-scores { display: grid; gap: 8px; color: var(--muted); font-size: 13px; }
+    .judge-scores div { border-radius: 8px; background: rgba(255,255,255,.045); padding: 8px; }
+    .judge-scores b { color: var(--text); margin-right: 10px; }
+    .warning { border: 1px solid rgba(245,158,11,.32); border-radius: 8px; background: rgba(245,158,11,.1); color: #fdecc8; padding: 10px; }
+    @media print {
+      :root { color-scheme: light; }
+      body { background: #fff; color: #111; }
+      main { padding: 18px; }
+      .tile, section, .judge { background: #fff; border-color: #d7d7d7; break-inside: avoid; }
+      .muted, .text-block, .judge p, .judge-scores { color: #333; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>道德问题评估报告</h1>
+      <p class="muted">由 Moral Dilemma Assessor 生成。错误度越高，代表该方行为问题越严重，不代表更有道理。</p>
+      <div class="meta">
+        <div class="tile"><span>生成时间</span><b>${htmlEscape(formatReportDate(report.generatedAt))}</b></div>
+        <div class="tile"><span>Token</span><b>${htmlEscape(String(data.total_tokens ?? usage.confirmedTokens ?? '-'))}</b></div>
+        <div class="tile"><span>AI 调用</span><b>${htmlEscape(String(data.ai_calls_completed ?? usage.callsCompleted ?? '-'))}/${htmlEscape(String(data.total_ai_calls ?? usage.totalCalls ?? '-'))}</b></div>
+        <div class="tile"><span>置信度</span><b>${htmlEscape(confidenceMap[summary.confidence || scores.confidence] || '-')}</b></div>
+      </div>
+    </header>
+
+    <section class="verdict">
+      <h2>${htmlEscape(summary.title || '未形成结论')}</h2>
+      <p class="muted">${htmlEscape(summary.detail || '陪审团结果不足，无法生成稳定结论。')}</p>
+      <p><b>主要问题：</b>${htmlEscape(summary.primary_issue || '-')}</p>
+      <p class="advice"><b>调解建议：</b>${htmlEscape(summary.mediation_advice || '建议补充更具体的行为、原话、时间顺序后重新分析。')}</p>
+    </section>
+
+    <section>
+      <h2>原始输入</h2>
+      <div class="text-block">${htmlEscape(report.input || '-')}</div>
+    </section>
+
+    <section>
+      <h2>客观事实</h2>
+      <div class="text-block">${htmlEscape(steps.step2_neutral?.neutral_narrative || '未生成')}</div>
+    </section>
+
+    <section>
+      <h2>视角重构</h2>
+      <div class="two-col">
+        <div><h3>正方（你）</h3><p class="text-block"><b>说出口的话：</b>${htmlEscape(perspective.pro_perspective?.spoken_words || '无')}</p><p class="text-block"><b>内心需求：</b>${htmlEscape(perspective.pro_perspective?.inner_need || '无')}</p></div>
+        <div><h3>反方（对方）</h3><p class="text-block"><b>说出口的话：</b>${htmlEscape(perspective.con_perspective?.spoken_words || '无')}</p><p class="text-block"><b>内心需求：</b>${htmlEscape(perspective.con_perspective?.inner_need || '无')}</p></div>
+      </div>
+    </section>
+
+    <section>
+      <h2>错误度</h2>
+      <div class="meta">
+        <div class="tile"><span>正方错误度</span><b>${scoreValue(scores.pro_total).toFixed(1)}</b></div>
+        <div class="tile"><span>反方错误度</span><b>${scoreValue(scores.con_total).toFixed(1)}</b></div>
+      </div>
+      <table>
+        <thead><tr><th>维度</th><th>正方</th><th>反方</th><th>说明</th></tr></thead>
+        <tbody>${scoreRows}</tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>陪审团点评</h2>
+      <div class="judge-grid">${judgeCards}</div>
+      ${failedJudges}
+    </section>
+  </main>
+</body>
+</html>`;
+    }
+
+    function downloadReport() {
+      if (!latestReport) {
+        setError('暂无可下载报告，请先完成一次分析。');
+        return;
+      }
+      const html = buildReportHtml(latestReport);
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `道德问题评估报告-${reportFileStamp(latestReport.generatedAt)}.html`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 800);
+      logEvent('报告已生成下载', 'ok');
+    }
+
+    function displayResults(data) {
+      const steps = data.steps || {};
+      const scores = data.final_scores || {};
+      const summary = scores.verdict_summary || {};
+      const confidenceMap = { high: '高', medium: '中', low: '低' };
+      latestReport = { data, input: pendingInput || $('input-text').value.trim(), generatedAt: new Date().toISOString() };
+      $('results').classList.remove('hidden');
+      $('verdict-title').textContent = summary.title || '未形成结论';
+      $('verdict-detail').textContent = summary.detail || '陪审团结果不足，无法生成稳定结论。';
+      $('primary-issue').textContent = summary.primary_issue || '-';
+      $('confidence-label').textContent = confidenceMap[summary.confidence || scores.confidence] || '-';
+      $('mediation-advice').textContent = summary.mediation_advice || '建议补充更具体的行为、原话、时间顺序后重新分析。';
+      $('neutral-narrative').textContent = steps.step2_neutral?.neutral_narrative || '未生成';
+      const perspective = steps.step3_perspective || {};
+      $('pro-spoken').textContent = perspective.pro_perspective?.spoken_words || '无';
+      $('pro-need').textContent = perspective.pro_perspective?.inner_need || '无';
+      $('con-spoken').textContent = perspective.con_perspective?.spoken_words || '无';
+      $('con-need').textContent = perspective.con_perspective?.inner_need || '无';
+      $('pro-total').textContent = scoreValue(scores.pro_total).toFixed(1);
+      $('con-total').textContent = scoreValue(scores.con_total).toFixed(1);
+      $('score-chart').innerHTML = scores.error
+        ? `<div class="rounded-lg border border-rose-300/30 bg-rose-400/10 p-4 text-sm text-rose-100">${htmlEscape(scores.error)}</div>`
+        : DIMENSIONS.map((dim, index) => {
+          const pro = scoreValue(scores.pro_avg?.[dim.key]);
+          const con = scoreValue(scores.con_avg?.[dim.key]);
+          return `<div class="score-card appear" style="animation-delay:${index * 60}ms">
+            <div class="score-heading">
+              <div class="text-sm font-semibold text-stone-100">${dim.label}</div>
+              <div class="rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[.12em] text-amber-100">错误指标</div>
+            </div>
+            <div class="score-axis">
+              <span>对象</span>
+              <div class="flex justify-between"><span>低</span><span>中</span><span>高</span></div>
+              <span class="text-right">分数</span>
+            </div>
+            ${renderSeverityRow('正方', pro, 'pro')}
+            ${renderSeverityRow('反方', con, 'con')}
+          </div>`;
+        }).join('');
+      const failedJudges = (scores.failed_judges || []).map(failed => `<div class="rounded-lg border border-amber-300/25 bg-amber-400/10 p-3 text-xs leading-5 text-amber-100">${htmlEscape(failed.judge_name || failed.judge_id || '某位裁判')} 未参与聚合：${htmlEscape(failed.error || '结果无效')}</div>`).join('');
+      $('verdict-reasons').innerHTML = (scores.judge_scores || []).map((judge, index) => {
+        const pro = judge.pro_scores || {};
+        const con = judge.con_scores || {};
+        return `<div class="jury-card appear" style="animation-delay:${index * 70}ms">
+          <div class="flex items-start justify-between gap-3">
+            <h4 class="text-sm font-bold leading-5">${htmlEscape(judge.judge_name || judge.judge_id)}</h4>
+            <span class="shrink-0 rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[11px] text-[color:var(--soft)]">权重 ${Number(judge.weight || 1).toFixed(1)}</span>
+          </div>
+          <p class="jury-reason">${htmlEscape(judge.brief_reason || '无点评')}</p>
+          <div class="jury-score-pair">
+            <div class="jury-score-row"><strong>正方</strong><span>${scoreText(pro.identity_labeling)} / ${scoreText(pro.proportionality)} / ${scoreText(pro.boundary_awareness)} / ${scoreText(pro.constructiveness)}</span></div>
+            <div class="jury-score-row"><strong>反方</strong><span>${scoreText(con.identity_labeling)} / ${scoreText(con.proportionality)} / ${scoreText(con.boundary_awareness)} / ${scoreText(con.constructiveness)}</span></div>
+          </div>
+        </div>`;
+      }).join('') + failedJudges;
+    }
+
+    function showNeedMoreInfo(question) {
+      usage.streaming = false;
+      setBusy(false);
+      setStatus('需要补充', 'idle');
+      $('followup-panel').classList.remove('hidden');
+      $('followup-question').textContent = question || '请补充更多具体事实。';
+      logEvent('需要补充更多事实', 'warn');
+    }
+
+    async function submitAssessment() {
+      const input = $('input-text').value.trim();
+      if (!input) { setError('请输入内容。'); return; }
+      pendingInput = input;
+      await runAssessment(input);
+    }
+
+    async function runAssessment(input) {
+      if (currentController) currentController.abort();
+      currentController = new AbortController();
+      streamStarted = false;
+      latestReport = null;
+      resetUsage();
+      resetProgress();
+      setError('');
+      $('results').classList.add('hidden');
+      $('followup-panel').classList.add('hidden');
+      usage.streaming = true;
+      setBusy(true);
+      setStatus('连接中', 'running');
+      logEvent('已提交分析请求');
+      startUsageTimer();
+      try {
+        const response = await fetch(API_BASE + '/assess/stream', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_input: input }),
+          signal: currentController.signal,
+        });
+        if (!response.ok) throw new Error(await response.text() || '请求失败');
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          buffer = processSSEBuffer(buffer);
+        }
+        if (buffer.trim()) processSSEBlock(buffer);
+      } catch (error) {
+        if (error.name === 'AbortError') return;
+        usage.streaming = false;
+        usage.activeCalls = 0;
+        setBusy(false);
+        setStatus('中断', 'error');
+        setError('分析中断：' + error.message);
+        logEvent('分析中断：' + error.message, 'error');
+      } finally {
+        usage.streaming = false;
+        currentController = null;
+      }
+    }
+
+    function handleStreamEvent(data, eventType = 'message') {
+      if (!streamStarted) { streamStarted = true; setStatus('分析中', 'running'); }
+      updateUsage(data);
+      if (eventType === 'error' || data.status === 'error') {
+        usage.streaming = false;
+        usage.activeCalls = 0;
+        setBusy(false);
+        setStatus('中断', 'error');
+        setError('分析中断：' + (data.message || '后端返回错误'));
+        logEvent(data.message || '后端返回错误', 'error');
+        return;
+      }
+      if (eventType === 'usage') {
+        if (data.source === 'judging') {
+          setProgress(4, 'running', data);
+          logEvent(`${data.judge_name || '裁判'} 完成，${data.completed_judges}/${data.total_judges}，${data.tps_observed || '--'} TPS`, 'ok');
+        }
+        return;
+      }
+      if (data.step) {
+        setProgress(data.step, data.status, data);
+        const label = STEP_LABELS[data.step] || data.label || '处理';
+        if (data.status === 'running') logEvent(`${label}开始`);
+        if (data.status === 'done') logEvent(`${label}完成 ${data.tokens?.tps_observed || '--'} TPS`, 'ok');
+        if (data.status === 'need_info') showNeedMoreInfo(data.result?.question);
+        return;
+      }
+      if (data.status === 'need_more_info') { showNeedMoreInfo(data.question); return; }
+      if (data.status === 'complete') {
+        usage.streaming = false;
+        usage.activeCalls = 0;
+        usage.confirmedTokens = Math.max(usage.confirmedTokens, Number(data.total_tokens) || 0);
+        usage.predictedTokens = usage.confirmedTokens;
+        setProgress(5, 'done');
+        setStatus('完成', 'done');
+        setBusy(false);
+        logEvent('分析完成', 'ok');
+        displayResults(data);
+      }
+    }
+
+    async function submitFollowup() {
+      const followup = $('followup-input').value.trim();
+      if (!followup) { setError('请补充信息。'); return; }
+      const combined = `${pendingInput}\n\n补充：${followup}`;
+      pendingInput = combined;
+      await runAssessment(combined);
+    }
+
+    function resetAll() {
+      if (currentController) currentController.abort();
+      currentController = null;
+      pendingInput = '';
+      streamStarted = false;
+      latestReport = null;
+      $('input-text').value = '';
+      $('followup-input').value = '';
+      $('followup-panel').classList.add('hidden');
+      $('results').classList.add('hidden');
+      text('char-count', '0 字');
+      setBusy(false);
+      setError('');
+      resetUsage();
+      resetProgress();
+    }
+
+    function bindConfigAutoSave() {
+      [
+        'config-api-key',
+        'config-api-base',
+        'config-model',
+        'config-default-temperature',
+        'config-judge-temperature',
+        'config-max-retries',
+      ].forEach(id => {
+        const element = $(id);
+        if (element) element.addEventListener('input', scheduleConfigSave);
+      });
+    }
+
+    $('input-text').addEventListener('input', function() { text('char-count', `${this.value.length} 字`); });
+    bindConfigAutoSave();
+    loadModelConfig();
+    resetUsage();
+    resetProgress();
+  </script>
+</body>
+</html>
