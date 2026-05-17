@@ -61,19 +61,6 @@ frontend/index.html
 
 配置会自动保存到本地 `app_config.json`。该文件可能包含密钥，已被 `.gitignore` 忽略，不应提交到 GitHub。
 
-## 发布前注意
-
-不要提交以下文件或目录：
-
-- `.env`
-- `app_config.json`
-- `private_backups/`
-- `.venv/`
-- `logs/`
-- `build/`
-- `dist/`
-- `.build_venv/`
-
 ## License
 
 This project is source-available under the PolyForm Noncommercial License 1.0.0.
