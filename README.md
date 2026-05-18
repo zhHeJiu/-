@@ -61,12 +61,3 @@ frontend/index.html
 
 配置会自动保存到本地 `app_config.json`。该文件可能包含密钥，已被 `.gitignore` 忽略，不应提交到 GitHub。
 
-## License
-
-This project is source-available under the PolyForm Noncommercial License 1.0.0.
-
-Commercial use is not permitted without separate prior written permission from the author.
-
-This is not an OSI-approved open-source license. It is intended for public source sharing while the project is still unfinished and commercial plans remain undecided.
-
-Required Notice: Moral Dilemma Assessor is source-available for noncommercial use only. Commercial use requires separate prior written permission from zh_zh.
