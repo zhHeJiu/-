@@ -59,5 +59,5 @@ frontend/index.html
 - 评分温度
 - 重试次数
 
-配置会自动保存到本地 `app_config.json`。该文件可能包含密钥，已被 `.gitignore` 忽略，不应提交到 GitHub。
+配置会自动保存到本地 `app_config.json`。
 
